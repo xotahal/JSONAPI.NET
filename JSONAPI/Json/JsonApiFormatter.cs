@@ -88,9 +88,13 @@ namespace JSONAPI.Json
                 || typeof(System.Guid).IsAssignableFrom(objectType)
                 || typeof(System.DateTime).IsAssignableFrom(objectType)
                 || typeof(System.DateTimeOffset).IsAssignableFrom(objectType)
+                || typeof(System.Decimal).IsAssignableFrom(objectType)
                 || typeof(System.Guid?).IsAssignableFrom(objectType)
                 || typeof(System.DateTime?).IsAssignableFrom(objectType)
                 || typeof(System.DateTimeOffset?).IsAssignableFrom(objectType)
+                || typeof(System.Decimal?).IsAssignableFrom(objectType)
+                || typeof(Nullable<int>).IsAssignableFrom(objectType)
+                || typeof(Nullable<bool>).IsAssignableFrom(objectType)
                 || typeof(String).IsAssignableFrom(objectType)
                 || objectType.IsEnum
                 || (objectType.IsGenericType &&
