@@ -247,7 +247,18 @@ namespace JSONAPI.Json
                 string lt = null;
                 SerializeAsOptions sa = SerializeAsOptions.Ids;
 
-                object[] attrs = prop.GetCustomAttributes(true);
+                Type valueType = value.GetType();
+
+                object[] attrs = null;
+
+                if (valueType.BaseType != null && valueType.Namespace == "System.Data.Entity.DynamicProxies")
+                {
+                    attrs = valueType.BaseType.GetProperty(prop.Name).GetCustomAttributes(true);
+                }
+                else
+                {
+                    attrs = prop.GetCustomAttributes(true);
+                }
 
                 foreach (object attr in attrs)
                 {
