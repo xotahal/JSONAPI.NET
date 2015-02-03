@@ -20,6 +20,7 @@ namespace JSONAPI.Tests.Json
     {
         Author a;
         Post p, p2, p3, p4;
+        Sample s1, s2;
 
         private class MockErrorSerializer : IErrorSerializer
         {
@@ -35,6 +36,13 @@ namespace JSONAPI.Tests.Json
                 serializer.Serialize(writer, "foo");
                 writer.WriteEndObject();
             }
+        }
+
+        private class NonStandardIdThing
+        {
+            [JSONAPI.Attributes.UseAsId]
+            public Guid Uuid { get; set; }
+            public string Data { get; set; }
         }
 
         [TestInitialize]
@@ -98,32 +106,80 @@ namespace JSONAPI.Tests.Json
                 }
             };
 
-        }
-
-        private enum TestEnum
-        {
-            
-        }
-
-        [TestMethod]
-        public void CanWritePrimitiveTest()
-        {
-            // Arrange
-            JsonApiFormatter formatter = new JSONAPI.Json.JsonApiFormatter(new PluralizationService());
-            // Act
-            // Assert
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(Int32)), "CanWriteTypeAsPrimitive returned wrong answer for Integer!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(Double)), "CanWriteTypeAsPrimitive returned wrong answer for Double!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(DateTime)), "CanWriteTypeAsPrimitive returned wrong answer for DateTime!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(DateTimeOffset)), "CanWriteTypeAsPrimitive returned wrong answer for DateTimeOffset!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(Guid)), "CanWriteTypeAsPrimitive returned wrong answer for Guid!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(String)), "CanWriteTypeAsPrimitive returned wrong answer for String!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(DateTime?)), "CanWriteTypeAsPrimitive returned wrong answer for nullable DateTime!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(DateTimeOffset?)), "CanWriteTypeAsPrimitive returned wrong answer for nullable DateTimeOffset!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(Guid?)), "CanWriteTypeAsPrimitive returned wrong answer for nullable Guid!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(TestEnum)), "CanWriteTypeAsPrimitive returned wrong answer for enum!");
-            Assert.IsTrue(formatter.CanWriteTypeAsPrimitive(typeof(TestEnum?)), "CanWriteTypeAsPrimitive returned wrong answer for nullable enum!");
-            Assert.IsFalse(formatter.CanWriteTypeAsPrimitive(typeof(Object)), "CanWriteTypeAsPrimitive returned wrong answer for Object!");
+            s1 = new Sample
+            {
+                Id = "1",
+                BooleanField = false,
+                NullableBooleanField = false,
+                SByteField = default(SByte),
+                NullableSByteField = null,
+                ByteField = default(Byte),
+                NullableByteField = null,
+                Int16Field = default(Int16),
+                NullableInt16Field = null,
+                UInt16Field = default(UInt16),
+                NullableUInt16Field = null,
+                Int32Field = default(Int32),
+                NullableInt32Field = null,
+                UInt32Field = default(Int32),
+                NullableUInt32Field = null,
+                Int64Field = default(Int64),
+                NullableInt64Field = null,
+                UInt64Field = default(UInt64),
+                NullableUInt64Field = null,
+                DoubleField = default(Double),
+                NullableDoubleField = null,
+                SingleField = default(Single),
+                NullableSingleField = null,
+                DecimalField = default(Decimal),
+                NullableDecimalField = null,
+                DateTimeField = default(DateTime),
+                NullableDateTimeField = null,
+                DateTimeOffsetField = default(DateTimeOffset),
+                NullableDateTimeOffsetField = null,
+                GuidField = default(Guid),
+                NullableGuidField = null,
+                StringField = default(String),
+                EnumField = default(SampleEnum),
+                NullableEnumField = null,
+            };
+            s2 = new Sample
+            {
+                Id = "2",
+                BooleanField = true,
+                NullableBooleanField = true,
+                SByteField = 123,
+                NullableSByteField = 123,
+                ByteField = 253,
+                NullableByteField = 253,
+                Int16Field = 32000,
+                NullableInt16Field = 32000,
+                UInt16Field = 64000,
+                NullableUInt16Field = 64000,
+                Int32Field = 2000000000,
+                NullableInt32Field = 2000000000,
+                UInt32Field = 3000000000,
+                NullableUInt32Field = 3000000000,
+                Int64Field = 9223372036854775807,
+                NullableInt64Field = 9223372036854775807,
+                UInt64Field = 9223372036854775808,
+                NullableUInt64Field = 9223372036854775808,
+                DoubleField = 1056789.123,
+                NullableDoubleField = 1056789.123,
+                SingleField = 1056789.123f,
+                NullableSingleField = 1056789.123f,
+                DecimalField = 1056789.123m,
+                NullableDecimalField = 1056789.123m,
+                DateTimeField = new DateTime(1776, 07, 04),
+                NullableDateTimeField = new DateTime(1776, 07, 04),
+                DateTimeOffsetField = new DateTimeOffset(new DateTime(1776, 07, 04), new TimeSpan(-5, 0, 0)),
+                NullableDateTimeOffsetField = new DateTimeOffset(new DateTime(1776, 07, 04), new TimeSpan(-5, 0, 0)),
+                GuidField = new Guid("6566F9B4-5245-40DE-890D-98B40A4AD656"),
+                NullableGuidField = new Guid("3D1FB81E-43EE-4D04-AF91-C8A326341293"),
+                StringField = "Some string 156",
+                EnumField = SampleEnum.Value1,
+                NullableEnumField = SampleEnum.Value2,
+            };
         }
 
         [TestMethod]
@@ -174,6 +230,62 @@ namespace JSONAPI.Tests.Json
             var expected = JsonHelpers.MinifyJson(File.ReadAllText("SerializerIntegrationTest.json"));
             Assert.AreEqual(expected, output.Trim());
             //Assert.AreEqual("[2,3,4]", sw.ToString());
+        }
+
+        [TestMethod]
+        [DeploymentItem(@"Data\AttributeSerializationTest.json")]
+        public void Serializes_attributes_properly()
+        {
+            // Arrang
+            JsonApiFormatter formatter = new JsonApiFormatter(new PluralizationService());
+            MemoryStream stream = new MemoryStream();
+
+            // Act
+            formatter.WriteToStreamAsync(typeof(Sample), new[] { s1, s2 }, stream, null, null);
+
+            // Assert
+            string output = System.Text.Encoding.ASCII.GetString(stream.ToArray());
+            Trace.WriteLine(output);
+            var expected = JsonHelpers.MinifyJson(File.ReadAllText("AttributeSerializationTest.json"));
+            Assert.AreEqual(expected, output.Trim());
+        }
+
+        [TestMethod]
+        [DeploymentItem(@"Data\ReformatsRawJsonStringWithUnquotedKeys.json")]
+        public void Reformats_raw_json_string_with_unquoted_keys()
+        {
+            // Arrange
+            JsonApiFormatter formatter = new JsonApiFormatter(new PluralizationService());
+            MemoryStream stream = new MemoryStream();
+
+            // Act
+            var payload = new [] { new Comment { Id = 5, CustomData = "{ unquotedKey: 5 }"}};
+            formatter.WriteToStreamAsync(typeof(Comment), payload, stream, null, null);
+
+            // Assert
+            var minifiedExpectedJson = JsonHelpers.MinifyJson(File.ReadAllText("ReformatsRawJsonStringWithUnquotedKeys.json"));
+            string output = System.Text.Encoding.ASCII.GetString(stream.ToArray());
+            Trace.WriteLine(output);
+            output.Should().Be(minifiedExpectedJson);
+        }
+
+        [TestMethod]
+        [DeploymentItem(@"Data\MalformedRawJsonString.json")]
+        public void Does_not_serialize_malformed_raw_json_string()
+        {
+            // Arrange
+            JsonApiFormatter formatter = new JsonApiFormatter(new PluralizationService());
+            MemoryStream stream = new MemoryStream();
+
+            // Act
+            var payload = new[] { new Comment { Id = 5, CustomData = "{ x }" } };
+            formatter.WriteToStreamAsync(typeof(Comment), payload, stream, null, null);
+
+            // Assert
+            var minifiedExpectedJson = JsonHelpers.MinifyJson(File.ReadAllText("MalformedRawJsonString.json"));
+            string output = System.Text.Encoding.ASCII.GetString(stream.ToArray());
+            Trace.WriteLine(output);
+            output.Should().Be(minifiedExpectedJson);
         }
 
         [TestMethod]
@@ -240,6 +352,24 @@ namespace JSONAPI.Tests.Json
         }
 
         [TestMethod]
+        public async Task Deserializes_attributes_properly()
+        {
+            // Arrange
+            JsonApiFormatter formatter = new JsonApiFormatter(new PluralizationService());
+            MemoryStream stream = new MemoryStream();
+
+            await formatter.WriteToStreamAsync(typeof(Sample), new List<Sample> { s1, s2 }, stream, null, null);
+            stream.Seek(0, SeekOrigin.Begin);
+
+            var deserialized = (IList<Sample>)await formatter.ReadFromStreamAsync(typeof(Sample), stream, null, null);
+
+            // Assert
+            deserialized.Count.Should().Be(2);
+            deserialized[0].ShouldBeEquivalentTo(s1);
+            deserialized[1].ShouldBeEquivalentTo(s2);
+        }
+
+        [TestMethod]
         [DeploymentItem(@"Data\DeserializeRawJsonTest.json")]
         public async Task DeserializeRawJsonTest()
         {
@@ -291,5 +421,86 @@ namespace JSONAPI.Tests.Json
             // Assert
             Assert.AreEqual("Jason Hater", a.Name); // Completed without exceptions and didn't timeout!
         }
+
+        [TestMethod]
+        [DeploymentItem(@"Data\NonStandardIdTest.json")]
+        public void SerializeNonStandardIdTest()
+        {
+            var formatter = new JSONAPI.Json.JsonApiFormatter(new PluralizationService());
+            var stream = new MemoryStream();
+            var payload = new List<NonStandardIdThing> {
+                new NonStandardIdThing { Uuid = new Guid("0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"), Data = "Swap" }
+            };
+
+            // Act
+            formatter.WriteToStreamAsync(typeof(List<NonStandardIdThing>), payload, stream, (System.Net.Http.HttpContent)null, (System.Net.TransportContext)null);
+
+            // Assert
+            var expectedJson = File.ReadAllText("NonStandardIdTest.json");
+            var minifiedExpectedJson = JsonHelpers.MinifyJson(expectedJson);
+            var output = System.Text.Encoding.ASCII.GetString(stream.ToArray());
+            output.Should().Be(minifiedExpectedJson);
+        }
+
+        #region Non-standard Id attribute tests
+
+        [TestMethod]
+        [DeploymentItem(@"Data\NonStandardIdTest.json")]
+        public void DeserializeNonStandardIdTest()
+        {
+            var formatter = new JSONAPI.Json.JsonApiFormatter(new PluralizationService());
+            var stream = new FileStream("NonStandardIdTest.json",FileMode.Open);
+
+            // Act
+            IList<NonStandardIdThing> things;
+            things = (IList<NonStandardIdThing>)formatter.ReadFromStreamAsync(typeof(NonStandardIdThing), stream, (System.Net.Http.HttpContent)null, (System.Net.Http.Formatting.IFormatterLogger)null).Result;
+            stream.Close();
+
+            // Assert
+            things.Count.Should().Be(1);
+            things.First().Uuid.Should().Be(new Guid("0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"));
+        }
+
+        [TestMethod]
+        [DeploymentItem(@"Data\NonStandardIdTest.json")]
+        public void DeserializeNonStandardIdWithIdOnly()
+        {
+            var formatter = new JSONAPI.Json.JsonApiFormatter(new PluralizationService());
+            string json = File.ReadAllText("NonStandardIdTest.json");
+            json = Regex.Replace(json, @"""uuid"":\s*""0657fd6d-a4ab-43c4-84e5-0933c84b4f4f""\s*,",""); // remove the uuid attribute
+            var stream = new MemoryStream(System.Text.Encoding.ASCII.GetBytes(json));
+
+            // Act
+            IList<NonStandardIdThing> things;
+            things = (IList<NonStandardIdThing>)formatter.ReadFromStreamAsync(typeof(NonStandardIdThing), stream, (System.Net.Http.HttpContent)null, (System.Net.Http.Formatting.IFormatterLogger)null).Result;
+
+            // Assert
+            json.Should().NotContain("uuid", "The \"uuid\" attribute was supposed to be removed, test methodology problem!");
+            things.Count.Should().Be(1);
+            things.First().Uuid.Should().Be(new Guid("0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"));
+        }
+
+        [TestMethod]
+        [DeploymentItem(@"Data\NonStandardIdTest.json")]
+        public void DeserializeNonStandardIdWithoutId()
+        {
+            var formatter = new JSONAPI.Json.JsonApiFormatter(new PluralizationService());
+            string json = File.ReadAllText("NonStandardIdTest.json");
+            json = Regex.Replace(json, @"""id"":\s*""0657fd6d-a4ab-43c4-84e5-0933c84b4f4f""\s*,", ""); // remove the uuid attribute
+            var stream = new MemoryStream(System.Text.Encoding.ASCII.GetBytes(json));
+
+            // Act
+            IList<NonStandardIdThing> things;
+            things = (IList<NonStandardIdThing>)formatter.ReadFromStreamAsync(typeof(NonStandardIdThing), stream, (System.Net.Http.HttpContent)null, (System.Net.Http.Formatting.IFormatterLogger)null).Result;
+
+            // Assert
+            json.Should().NotContain("\"id\"", "The \"id\" attribute was supposed to be removed, test methodology problem!");
+            things.Count.Should().Be(1);
+            things.First().Uuid.Should().Be(new Guid("0657fd6d-a4ab-43c4-84e5-0933c84b4f4f"));
+
+        }
+    
+        #endregion
+
     }
 }

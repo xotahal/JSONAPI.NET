@@ -14,6 +14,7 @@ using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using JSONAPI.Extensions;
 
 namespace JSONAPI.Json
 {
@@ -41,7 +42,10 @@ namespace JSONAPI.Json
             _modelManager = modelManager;
             _errorSerializer = errorSerializer;
             SupportedMediaTypes.Add(new MediaTypeHeaderValue("application/vnd.api+json"));
+            ValidateRawJsonStrings = true;
         }
+
+        public bool ValidateRawJsonStrings { get; set; }
 
         [Obsolete("Use ModelManager.PluralizationService instead")]
         public IPluralizationService PluralizationService  //FIXME: Deprecated, will be removed shortly
@@ -80,29 +84,6 @@ namespace JSONAPI.Json
         public override bool CanWriteType(Type type)
         {
             return true;
-        }
-
-        public bool CanWriteTypeAsPrimitive(Type objectType)
-        {
-            if (objectType.IsPrimitive
-                || typeof(System.Guid).IsAssignableFrom(objectType)
-                || typeof(System.DateTime).IsAssignableFrom(objectType)
-                || typeof(System.DateTimeOffset).IsAssignableFrom(objectType)
-                || typeof(System.Decimal).IsAssignableFrom(objectType)
-                || typeof(System.Guid?).IsAssignableFrom(objectType)
-                || typeof(System.DateTime?).IsAssignableFrom(objectType)
-                || typeof(System.DateTimeOffset?).IsAssignableFrom(objectType)
-                || typeof(System.Decimal?).IsAssignableFrom(objectType)
-                || typeof(Nullable<int>).IsAssignableFrom(objectType)
-                || typeof(Nullable<bool>).IsAssignableFrom(objectType)
-                || typeof(String).IsAssignableFrom(objectType)
-                || objectType.IsEnum
-                || (objectType.IsGenericType &&
-                    objectType.GetGenericTypeDefinition() == typeof(Nullable<>) &&
-                    objectType.GetGenericArguments()[0].IsEnum)
-                )
-                return true;
-            else return false;
         }
 
         #region Serialization
@@ -184,6 +165,13 @@ namespace JSONAPI.Json
         {
             writer.WriteStartObject();
 
+            // The spec no longer requires that the ID key be "id":
+            //     "An ID SHOULD be represented by an 'id' key..." :-/
+            // But Ember Data does. So, we'll add "id" to the document
+            // always, and also serialize the property under its given
+            // name, for now at least.
+            //TODO: Partly because of this, we should probably disallow updates to Id properties where practical.
+
             // Do the Id now...
             writer.WritePropertyName("id");
             var idProp = _modelManager.GetIdProperty(value.GetType());
@@ -198,19 +186,27 @@ namespace JSONAPI.Json
 
             foreach (PropertyInfo prop in props)
             {
-                if (prop == idProp) continue;
+                string propKey = _modelManager.GetJsonKeyForProperty(prop);
+                if (propKey == "id") continue; // Don't write the "id" property twice, see above!
 
-                if (this.CanWriteTypeAsPrimitive(prop.PropertyType))
+                if (prop.PropertyType.CanWriteAsJsonApiAttribute())
                 {
                     if (prop.GetCustomAttributes().Any(attr => attr is JsonIgnoreAttribute))
                         continue;
 
                     // numbers, strings, dates...
-                    writer.WritePropertyName(_modelManager.GetJsonKeyForProperty(prop));
+                    writer.WritePropertyName(propKey);
 
                     var propertyValue = prop.GetValue(value, null);
 
-                    if (prop.PropertyType == typeof (string) &&
+                    if (prop.PropertyType == typeof (Decimal) || prop.PropertyType == typeof (Decimal?))
+                    {
+                        if (propertyValue == null)
+                            writer.WriteNull();
+                        else
+                            writer.WriteValue(propertyValue.ToString());
+                    }
+                    else if (prop.PropertyType == typeof (string) &&
                         prop.GetCustomAttributes().Any(attr => attr is SerializeStringAsRawJsonAttribute))
                     {
                         if (propertyValue == null)
@@ -219,8 +215,21 @@ namespace JSONAPI.Json
                         }
                         else
                         {
-                            var minifiedValue = JsonHelpers.MinifyJson((string) propertyValue);
-                            writer.WriteRawValue(minifiedValue);
+                            var json = (string) propertyValue;
+                            if (ValidateRawJsonStrings)
+                            {
+                                try
+                                {
+                                    var token = JToken.Parse(json);
+                                    json = token.ToString();
+                                }
+                                catch (Exception)
+                                {
+                                    json = "{}";
+                                }
+                            }
+                            var valueToSerialize = JsonHelpers.MinifyJson(json);
+                            writer.WriteRawValue(valueToSerialize);
                         }
                     }
                     else
@@ -247,18 +256,7 @@ namespace JSONAPI.Json
                 string lt = null;
                 SerializeAsOptions sa = SerializeAsOptions.Ids;
 
-                Type valueType = value.GetType();
-
-                object[] attrs = null;
-
-                if (valueType.BaseType != null && valueType.Namespace == "System.Data.Entity.DynamicProxies")
-                {
-                    attrs = valueType.BaseType.GetProperty(prop.Name).GetCustomAttributes(true);
-                }
-                else
-                {
-                    attrs = prop.GetCustomAttributes(true);
-                }
+                object[] attrs = prop.GetCustomAttributes(true);
 
                 foreach (object attr in attrs)
                 {
@@ -624,23 +622,31 @@ namespace JSONAPI.Json
                 if (reader.TokenType == JsonToken.PropertyName)
                 {
                     string value = (string)reader.Value;
-                    PropertyInfo prop;
+                    PropertyInfo prop = _modelManager.GetPropertyForJsonKey(objectType, value);
+                    // If the model object has a non-standard Id property, but the "id" key is being used...
+                    if (prop == null && value == "id") prop = _modelManager.GetIdProperty(objectType);
+
                     if (value == "links")
                     {
                         reader.Read(); // burn the PropertyName token
                         //TODO: linked resources (Done??)
                         DeserializeLinkedResources(retval, readStream, reader, serializer);
                     }
-                    else if ((prop = _modelManager.GetPropertyForJsonKey(objectType, value)) != null)
+                    else if (prop != null)
                     {
-                        reader.Read(); // burn the PropertyName token
-                        //TODO: Embedded would be dropped here!
-                        if (!CanWriteTypeAsPrimitive(prop.PropertyType)) continue; // These aren't supposed to be here, they're supposed to be in "links"!
+                        if (!prop.PropertyType.CanWriteAsJsonApiAttribute())
+                        {
+                            reader.Read(); // burn the PropertyName token
+                            //TODO: Embedded would be dropped here!
+                            continue; // These aren't supposed to be here, they're supposed to be in "links"!
+                        }
 
                         object propVal;
-                        if (prop.PropertyType == typeof (string) &&
+                        Type enumType;
+                        if (prop.PropertyType == typeof(string) &&
                             prop.GetCustomAttributes().Any(attr => attr is SerializeStringAsRawJsonAttribute))
                         {
+                            reader.Read();
                             if (reader.TokenType == JsonToken.Null)
                             {
                                 propVal = null;
@@ -652,10 +658,31 @@ namespace JSONAPI.Json
                                 propVal = JsonHelpers.MinifyJson(rawPropVal);
                             }
                         }
+                        else if (prop.PropertyType.IsGenericType &&
+                                 prop.PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>) &&
+                                 (enumType = prop.PropertyType.GetGenericArguments()[0]).IsEnum)
+                        {
+                            // Nullable enums need special handling
+                            reader.Read();
+                            propVal = reader.TokenType == JsonToken.Null
+                                ? null
+                                : Enum.Parse(enumType, reader.Value.ToString());
+                        }
+                        else if (prop.PropertyType == typeof(DateTimeOffset) ||
+                                 prop.PropertyType == typeof(DateTimeOffset?))
+                        {
+                            // For some reason 
+                            reader.ReadAsString();
+                            propVal = reader.TokenType == JsonToken.Null
+                                ? (object) null
+                                : DateTimeOffset.Parse(reader.Value.ToString());
+                        }
                         else
                         {
-                            propVal = DeserializePrimitive(prop.PropertyType, reader);
+                            reader.Read();
+                            propVal = DeserializeAttribute(prop.PropertyType, reader);
                         }
+
 
                         prop.SetValue(retval, propVal, null);
 
@@ -681,7 +708,7 @@ namespace JSONAPI.Json
             // Suss out all the relationship members, and which ones have what cardinality...
             IEnumerable<PropertyInfo> relations = (
                 from prop in objectType.GetProperties()
-                where !CanWriteTypeAsPrimitive(prop.PropertyType)
+                where !CanWriteTypeAsJsonApiAttribute(prop.PropertyType)
                 && prop.GetCustomAttributes(true).Any(attribute => attribute is System.Runtime.Serialization.DataMemberAttribute)
                 select prop
                 );
@@ -728,7 +755,7 @@ namespace JSONAPI.Json
                     string value = (string)reader.Value;
                     reader.Read(); // burn the PropertyName token
                     PropertyInfo prop = _modelManager.GetPropertyForJsonKey(objectType, value);
-                    if (prop != null && !CanWriteTypeAsPrimitive(prop.PropertyType))
+                    if (prop != null && !prop.PropertyType.CanWriteAsJsonApiAttribute())
                     {
                         //FIXME: We're really assuming they're ICollections...but testing for that doesn't work for some reason. Break prone!
                         if (prop.PropertyType.GetInterfaces().Contains(typeof(IEnumerable)) && prop.PropertyType.IsGenericType)
@@ -825,10 +852,12 @@ namespace JSONAPI.Json
             }
         }
 
-        private object DeserializePrimitive(Type type, JsonReader reader)
+        private object DeserializeAttribute(Type type, JsonReader reader)
         {
-            //TODO: This may be cheating a little bit...
-            JToken token = JToken.Load(reader);
+            if (reader.TokenType == JsonToken.Null)
+                return null;
+
+            var token = JToken.Load(reader);
             return token.ToObject(type);
         }
 
