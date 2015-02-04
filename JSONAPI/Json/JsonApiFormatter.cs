@@ -34,7 +34,7 @@ namespace JSONAPI.Json
         internal JsonApiFormatter(IErrorSerializer errorSerializer)
             : this(new ModelManager(new PluralizationService()), errorSerializer)
         {
-            
+
         }
 
         internal JsonApiFormatter(IModelManager modelManager, IErrorSerializer errorSerializer)
@@ -101,7 +101,7 @@ namespace JSONAPI.Json
                     this.RelationAggregators[writeStream] = aggregator;
                 }
             }
-            
+
             var contentHeaders = content == null ? null : content.Headers;
             var effectiveEncoding = SelectCharacterEncoding(contentHeaders);
             JsonWriter writer = this.CreateJsonWriter(typeof(object), writeStream, effectiveEncoding);
@@ -115,7 +115,7 @@ namespace JSONAPI.Json
             {
                 Type valtype = GetSingleType(value.GetType());
                 if (_modelManager.IsSerializedAsMany(value.GetType()))
-                    aggregator.AddPrimary(valtype, (IEnumerable<object>) value);
+                    aggregator.AddPrimary(valtype, (IEnumerable<object>)value);
                 else
                     aggregator.AddPrimary(valtype, value);
 
@@ -199,14 +199,15 @@ namespace JSONAPI.Json
 
                     var propertyValue = prop.GetValue(value, null);
 
-                    if (prop.PropertyType == typeof (Decimal) || prop.PropertyType == typeof (Decimal?))
+                    if (prop.PropertyType == typeof(Decimal) || prop.PropertyType == typeof(Decimal?))
                     {
                         if (propertyValue == null)
                             writer.WriteNull();
                         else
-                            writer.WriteValue(propertyValue.ToString());
+                            writer.WriteValue(propertyValue);
+                            //writer.WriteValue(propertyValue.ToString());
                     }
-                    else if (prop.PropertyType == typeof (string) &&
+                    else if (prop.PropertyType == typeof(string) &&
                         prop.GetCustomAttributes().Any(attr => attr is SerializeStringAsRawJsonAttribute))
                     {
                         if (propertyValue == null)
@@ -215,7 +216,7 @@ namespace JSONAPI.Json
                         }
                         else
                         {
-                            var json = (string) propertyValue;
+                            var json = (string)propertyValue;
                             if (ValidateRawJsonStrings)
                             {
                                 try
@@ -256,7 +257,18 @@ namespace JSONAPI.Json
                 string lt = null;
                 SerializeAsOptions sa = SerializeAsOptions.Ids;
 
-                object[] attrs = prop.GetCustomAttributes(true);
+                Type valueType = value.GetType();
+
+                object[] attrs = null;
+
+                if (valueType.BaseType != null && valueType.Namespace == "System.Data.Entity.DynamicProxies")
+                {
+                    attrs = valueType.BaseType.GetProperty(prop.Name).GetCustomAttributes(true);
+                }
+                else
+                {
+                    attrs = prop.GetCustomAttributes(true);
+                }
 
                 foreach (object attr in attrs)
                 {
@@ -329,7 +341,13 @@ namespace JSONAPI.Json
                             // Not really supported by Ember Data yet, incidentally...but easy to implement here.
                             //writer.WritePropertyName(ContractResolver._modelManager.GetJsonKeyForProperty(prop));
                             //serializer.Serialize(writer, prop.GetValue(value, null));
-                            this.Serialize(prop.GetValue(value, null), writeStream, writer, serializer, aggregator);
+                            //this.Serialize(prop.GetValue(value, null), writeStream, writer, serializer, aggregator);
+                            var propValue = prop.GetValue(value, null);
+
+                            if (_modelManager.IsSerializedAsMany(propValue.GetType()))
+                                this.SerializeMany(propValue, writeStream, writer, serializer, aggregator);
+                            else
+                                this.Serialize(propValue, writeStream, writer, serializer, aggregator);
                             break;
                     }
                 }
@@ -357,9 +375,9 @@ namespace JSONAPI.Json
                                 if (lt == null)
                                     throw new JsonSerializationException(
                                         "A property was decorated with SerializeAs(SerializeAsOptions.Link) but no LinkTemplate attribute was provided.");
-                                string link = String.Format(lt, objId,  
+                                string link = String.Format(lt, objId,
                                     GetIdFor(value)); //value.GetType().GetProperty("Id").GetValue(value, null));
-                                    
+
                                 //writer.WritePropertyName(ContractResolver._modelManager.GetJsonKeyForProperty(prop));
                                 writer.WriteStartObject();
                                 writer.WritePropertyName("href");
@@ -674,7 +692,7 @@ namespace JSONAPI.Json
                             // For some reason 
                             reader.ReadAsString();
                             propVal = reader.TokenType == JsonToken.Null
-                                ? (object) null
+                                ? (object)null
                                 : DateTimeOffset.Parse(reader.Value.ToString());
                         }
                         else
