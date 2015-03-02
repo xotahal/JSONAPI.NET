@@ -20,6 +20,16 @@ namespace JSONAPI.Json
 {
     public class JsonApiFormatter : JsonMediaTypeFormatter
     {
+        #region Private methods
+
+        /// <summary>
+        /// Pokud bude v requestu specifikovane fields, pak se tato properta naplni specifikovanymi
+        /// propertami a jen ty se budou serializovat.
+        /// </summary>
+        private List<string> _fields = null;
+
+        #endregion
+
         public JsonApiFormatter(IModelManager modelManager) :
             this(modelManager, new ErrorSerializer())
         {
@@ -85,6 +95,40 @@ namespace JSONAPI.Json
         {
             return true;
         }
+
+
+        /// <summary>
+        /// Override this method to capture the Request object
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="request"></param>
+        /// <param name="mediaType"></param>
+        /// <returns></returns>
+        public override MediaTypeFormatter GetPerRequestFormatterInstance(Type type, System.Net.Http.HttpRequestMessage request, MediaTypeHeaderValue mediaType)
+        {
+            //IEnumerable<KeyValuePair request.GetQueryNameValuePairs()
+            var pairs = request.GetQueryNameValuePairs().ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
+
+            var match = pairs.FirstOrDefault(kv => string.Compare(kv.Key, "fields", true) == 0);
+            if (string.IsNullOrEmpty(match.Value) == false)
+            {
+                _fields = new List<string>();
+
+                foreach (string val in match.Value.Split(','))
+                {
+                    _fields.Add(val);
+                }
+            }
+            else
+            {
+                _fields = null;
+            }
+
+
+            return base.GetPerRequestFormatterInstance(type, request, mediaType);
+        }
+
+
 
         #region Serialization
 
@@ -188,6 +232,11 @@ namespace JSONAPI.Json
             {
                 string propKey = _modelManager.GetJsonKeyForProperty(prop);
                 if (propKey == "id") continue; // Don't write the "id" property twice, see above!
+
+                if(_fields != null){
+                    if (_fields.Contains(propKey) == false)
+                        continue;
+                }
 
                 if (prop.PropertyType.CanWriteAsJsonApiAttribute())
                 {
