@@ -15,6 +15,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using JSONAPI.Extensions;
+using Newtonsoft.Json.Serialization;
 
 namespace JSONAPI.Json
 {
@@ -29,6 +30,12 @@ namespace JSONAPI.Json
         private List<string> _fields = null;
 
         #endregion
+
+        public JsonApiFormatter(IModelManager modelManager, List<string> fields)
+            : this(modelManager)
+        {
+            _fields = fields;
+        }
 
         public JsonApiFormatter(IModelManager modelManager) :
             this(modelManager, new ErrorSerializer())
@@ -112,18 +119,18 @@ namespace JSONAPI.Json
             var match = pairs.FirstOrDefault(kv => string.Compare(kv.Key, "fields", true) == 0);
             if (string.IsNullOrEmpty(match.Value) == false)
             {
-                _fields = new List<string>();
+                List<string> fields = new List<string>();
 
                 foreach (string val in match.Value.Split(','))
                 {
-                    _fields.Add(val);
+                    fields.Add(val);
                 }
-            }
-            else
-            {
-                _fields = null;
-            }
 
+                var formatter = new JsonApiFormatter(ModelManager, fields);
+                formatter.SerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
+
+                return formatter;
+            }
 
             return base.GetPerRequestFormatterInstance(type, request, mediaType);
         }
@@ -233,7 +240,8 @@ namespace JSONAPI.Json
                 string propKey = _modelManager.GetJsonKeyForProperty(prop);
                 if (propKey == "id") continue; // Don't write the "id" property twice, see above!
 
-                if(_fields != null){
+                if (_fields != null)
+                {
                     if (_fields.Contains(propKey) == false)
                         continue;
                 }
@@ -254,7 +262,7 @@ namespace JSONAPI.Json
                             writer.WriteNull();
                         else
                             writer.WriteValue(propertyValue);
-                            //writer.WriteValue(propertyValue.ToString());
+                        //writer.WriteValue(propertyValue.ToString());
                     }
                     else if (prop.PropertyType == typeof(string) &&
                         prop.GetCustomAttributes().Any(attr => attr is SerializeStringAsRawJsonAttribute))
