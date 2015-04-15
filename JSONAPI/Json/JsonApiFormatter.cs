@@ -177,9 +177,9 @@ namespace JSONAPI.Json
                 writer.WriteStartObject();
                 writer.WritePropertyName(root);
                 if (_modelManager.IsSerializedAsMany(value.GetType()))
-                    this.SerializeMany(value, writeStream, writer, serializer, aggregator);
+                    this.SerializeMany(value, writeStream, writer, serializer, aggregator, _fields);
                 else
-                    this.Serialize(value, writeStream, writer, serializer, aggregator);
+                    this.Serialize(value, writeStream, writer, serializer, aggregator, _fields);
 
                 // Include links from aggregator
                 SerializeLinkedResources(writeStream, writer, serializer, aggregator);
@@ -202,17 +202,17 @@ namespace JSONAPI.Json
             return tcs.Task;
         }
 
-        protected void SerializeMany(object value, Stream writeStream, JsonWriter writer, JsonSerializer serializer, RelationAggregator aggregator)
+        protected void SerializeMany(object value, Stream writeStream, JsonWriter writer, JsonSerializer serializer, RelationAggregator aggregator, List<string> fields)
         {
             writer.WriteStartArray();
             foreach (object singleVal in (IEnumerable)value)
             {
-                this.Serialize(singleVal, writeStream, writer, serializer, aggregator);
+                this.Serialize(singleVal, writeStream, writer, serializer, aggregator, fields);
             }
             writer.WriteEndArray();
         }
 
-        protected void Serialize(object value, Stream writeStream, JsonWriter writer, JsonSerializer serializer, RelationAggregator aggregator)
+        protected void Serialize(object value, Stream writeStream, JsonWriter writer, JsonSerializer serializer, RelationAggregator aggregator, List<string> fields)
         {
             writer.WriteStartObject();
 
@@ -240,9 +240,9 @@ namespace JSONAPI.Json
                 string propKey = _modelManager.GetJsonKeyForProperty(prop);
                 if (propKey == "id") continue; // Don't write the "id" property twice, see above!
 
-                if (_fields != null)
+                if (fields != null)
                 {
-                    if (_fields.Contains(propKey) == false)
+                    if (fields.Contains(propKey) == false)
                         continue;
                 }
 
@@ -401,10 +401,11 @@ namespace JSONAPI.Json
                             //this.Serialize(prop.GetValue(value, null), writeStream, writer, serializer, aggregator);
                             var propValue = prop.GetValue(value, null);
 
+                            // TODO: pokud budu chtit omezovat i podobjekty, tak muzu napriklad za teckou (napriklad changeOfStates.id)
                             if (_modelManager.IsSerializedAsMany(propValue.GetType()))
-                                this.SerializeMany(propValue, writeStream, writer, serializer, aggregator);
+                                this.SerializeMany(propValue, writeStream, writer, serializer, aggregator, null);
                             else
-                                this.Serialize(propValue, writeStream, writer, serializer, aggregator);
+                                this.Serialize(propValue, writeStream, writer, serializer, aggregator, null);
                             break;
                     }
                 }
@@ -445,7 +446,7 @@ namespace JSONAPI.Json
                                 // Not really supported by Ember Data yet, incidentally...but easy to implement here.
                                 //writer.WritePropertyName(ContractResolver._modelManager.GetJsonKeyForProperty(prop));
                                 //serializer.Serialize(writer, prop.GetValue(value, null));
-                                this.Serialize(prop.GetValue(value, null), writeStream, writer, serializer, aggregator);
+                                this.Serialize(prop.GetValue(value, null), writeStream, writer, serializer, aggregator, null);
                                 break;
                         }
                     }
@@ -521,7 +522,7 @@ namespace JSONAPI.Json
                         numAdditions += tbp.Count;
                         foreach (object obj in tbp)
                         {
-                            Serialize(obj, writeStream, jw, serializer, aggregator); // Note, not writer, but jw--we write each type to its own JsonWriter and combine them later.
+                            Serialize(obj, writeStream, jw, serializer, aggregator, null); // Note, not writer, but jw--we write each type to its own JsonWriter and combine them later.
                         }
                         processed[type].UnionWith(tbp);
                     }
