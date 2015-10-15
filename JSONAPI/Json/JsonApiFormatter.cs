@@ -118,25 +118,6 @@ namespace JSONAPI.Json
         /// <returns></returns>
         public override MediaTypeFormatter GetPerRequestFormatterInstance(Type type, System.Net.Http.HttpRequestMessage request, MediaTypeHeaderValue mediaType)
         {
-            //IEnumerable<KeyValuePair request.GetQueryNameValuePairs()
-            var pairs = request.GetQueryNameValuePairs().ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
-
-            var match = pairs.FirstOrDefault(kv => string.Compare(kv.Key, "fields", true) == 0);
-            if (string.IsNullOrEmpty(match.Value) == false)
-            {
-                List<string> fields = new List<string>();
-
-                foreach (string val in match.Value.Split(','))
-                {
-                    fields.Add(val);
-                }
-
-                var formatter = new JsonApiFormatter(ModelManager, fields);
-                formatter.SerializerSettings.ContractResolver = new CamelCasePropertyNamesContractResolver();
-
-                return formatter;
-            }
-
             return base.GetPerRequestFormatterInstance(type, request, mediaType);
         }
 
