@@ -250,10 +250,14 @@ namespace JSONAPI.Json
                 {
                     if (modelProperty.IgnoreByDefault) continue; // TODO: allow overriding this
 
+                    var propertyValue = prop.GetValue(value, null);
+
+                    if (propertyValue == null)
+                        continue;
+
                     // numbers, strings, dates...
                     writer.WritePropertyName(modelProperty.JsonKey);
 
-                    var propertyValue = prop.GetValue(value, null);
 
                     if (prop.PropertyType == typeof(Decimal) || prop.PropertyType == typeof(Decimal?))
                     {
